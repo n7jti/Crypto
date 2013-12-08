@@ -16,30 +16,53 @@
 //
 
 #include "stdafx.h"
-#include <stdio.h>
-#include <windows.h>
-#include <wincrypt.h>
 
+void usage();
+bool parseCommandLine(int argc, wchar_t* argv[], long *pcb);
 
 int wmain(int argc, wchar_t* argv[])
 {
-	HCRYPTPROV hCryptProv =  NULL;
+	HCRYPTPROV hCryptProv = NULL;
 	BOOL fRet = FALSE;
-	fRet = CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
+	long cb = 0; // Count of bytes
 
-	BYTE dwData[32];
-	if (fRet){
-		fRet = CryptGenRandom(hCryptProv, 32, dwData);
+	fRet = parseCommandLine(argc, argv, &cb);
+	if (!fRet){
+		usage();
+		return 1;
 	}
 
-	if (fRet){
-		for (int i = 1; i < sizeof(dwData); ++i){
-			printf("%02X", dwData[i]);
+	if (fRet)
+	{
+		fRet = CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
+	}
+
+	BYTE* pbData = nullptr;
+	if (fRet)
+	{
+		pbData = new BYTE[cb];
+		if (nullptr == pbData){
+			printf("Out Of Memory!");
+			fRet = false;
+		}
+	}
+	
+	if (fRet)
+	{
+		fRet = CryptGenRandom(hCryptProv, cb, pbData);
+	}
+
+	if (fRet)
+	{
+		for (int i = 1; i < cb; ++i)
+		{
+			printf("%02X", pbData[i]);
 		}
 		printf("\n");
 	}
 
-	if (hCryptProv){
+	if (hCryptProv)
+	{
 		CryptReleaseContext(hCryptProv, 0);
 		hCryptProv = NULL;
 	}
@@ -47,3 +70,49 @@ int wmain(int argc, wchar_t* argv[])
 	return 0;
 }
 
+void usage()
+{
+	printf("Prints out a cryptograpically secure random number of bytes as hex encoded string.\n");
+	printf("\n");
+    printf("RandBits <bytes>\n");
+	printf("\n");
+	printf("<bytes>   The number of random bytes to produce.\n");
+	printf("          If not specified, it generates 32 bytes (256bits) of random data.\n");
+	printf("          The tool will generate a maximum of 1MB of random data\n");
+}
+
+bool parseCommandLine(int argc, wchar_t* argv[], long *pcb)
+{
+	bool fRet = true;
+	*pcb = 32;
+
+
+	if (argc > 2)
+	{
+		printf("Too many arguments!\n\n");
+		*pcb = 0;
+		return false;
+	}
+	else if (argc == 2)
+	{
+		// We've got one argument.. 
+		long bytes = _wtol(argv[1]);
+		if (bytes > 0x100000)
+		{
+			printf("Input too large. A maximum of 1048576 bytes can be requested.\n\n");
+			*pcb = 0;
+			return false;
+		}
+		
+		if (bytes < 1)
+		{
+			printf("Input too small, A minimum of 1 byte can be requested. \n\n");
+			*pcb = 0;
+			return false;
+		}
+
+		*pcb = bytes;
+	}
+
+	return fRet;
+}
